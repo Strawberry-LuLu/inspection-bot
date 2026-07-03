@@ -1,0 +1,11 @@
+{
+  "name": "inspection-bot",
+  "version": "1.0.0",
+  "main": "worker.js",
+  "scripts": {
+    "start": "node worker.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.2"
+  }
+}
