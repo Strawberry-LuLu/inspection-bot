@@ -173,18 +173,18 @@ async function handleCallback(callback, env) {
   await answerCallback(env.BOT_TOKEN, callback.id);
 
 if (data === "create_object") {
-  const broker = await getCurrentBroker(env, chatId);
+  let broker = await getCurrentBroker(env, chatId);
 
   if (!(await isAdmin(env, chatId)) && !broker) {
     return sendBrokerLinkMenu(env, chatId);
   }
 
-if ((await isAdmin(env, chatId)) && !broker) {
-  broker = {
-    id: "admin",
-    name: "Тест"
-  };
-}
+  if ((await isAdmin(env, chatId)) && !broker) {
+    broker = {
+      id: "admin",
+      name: "Тест"
+    };
+  }
 
   const object = await createObject(env, chatId, broker);
   await setState(env, chatId, "waiting_title", object.number, "", "");
