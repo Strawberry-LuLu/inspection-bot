@@ -520,6 +520,7 @@ return rows
     title: r[4],
     status: r[7]
   }));
+  } 
 
 async function getObject(env, objectId) {
   const token = await getAccessToken(env);
