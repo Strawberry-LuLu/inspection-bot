@@ -1,16 +1,6 @@
 import { PDFDocument, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 
-const BROKERS = [
-  { id: "b1", name: "Артем Маркезини" },
-  { id: "b2", name: "Алина Мержоева" },
-  { id: "b3", name: "Виктория Азнаурян" },
-  { id: "b4", name: "Святослав Кукушкин" },
-  { id: "b5", name: "Олег Кривоносов" },
-  { id: "b6", name: "Любовь Коровкина" },
-  { id: "b7", name: "Елена Ахтареева" }
-];
-
 const SECTIONS = [
   ["identification", "1. Идентификация объекта"],
   ["owners", "2. Информация о собственниках"],
@@ -168,7 +158,7 @@ async function handleCallback(callback, env) {
 
   await answerCallback(env.BOT_TOKEN, callback.id);
 
-  if (data === "create_object") return sendBrokerSelect(env.BOT_TOKEN, chatId);
+  if (data === "create_object") return sendBrokerSelect(env, chatId);
   if (data === "main_menu") { await clearState(env, chatId); return sendMainMenu(env.BOT_TOKEN, chatId); }
 
   if (data === "my_objects") {
@@ -179,6 +169,26 @@ async function handleCallback(callback, env) {
     keyboard.push([{ text: "Назад", callback_data: "main_menu" }]);
     return sendMessage(env.BOT_TOKEN, chatId, "Ваши объекты:", { inline_keyboard: keyboard });
   }
+
+  if (data.startsWith("broker:")) {
+  const brokerId = data.split(":")[1];
+
+  const brokers = await getBrokers(env);
+  const broker = brokers.find(b => b.id === brokerId);
+
+  if (!broker) {
+    return sendMessage(env.BOT_TOKEN, chatId, "Брокер не найден или неактивен.");
+  }
+
+  const object = await createObject(env, chatId, broker);
+  await setState(env, chatId, "waiting_title", object.number, "", "");
+
+  return sendMessage(
+    env.BOT_TOKEN,
+    chatId,
+    `✅ Объект создан\n\n${object.number}\nБрокер: ${broker.name}\nСтатус: 🟡 Черновик\n\nВведите название объекта сообщением.\nНапример: ЖК Символ, 2-комн., аренда`
+  );
+}
 
  if (data.startsWith("pdf:")) {
   const objectId = data.split(":")[1];
@@ -249,10 +259,18 @@ async function sendMainMenu(token, chatId) {
   });
 }
 
-async function sendBrokerSelect(token, chatId) {
-  const keyboard = BROKERS.map(b => [{ text: b.name, callback_data: `broker:${b.id}` }]);
+async function sendBrokerSelect(env, chatId) {
+  const brokers = await getBrokers(env);
+
+  const keyboard = brokers.map(b => [
+    { text: b.name, callback_data: `broker:${b.id}` }
+  ]);
+
   keyboard.push([{ text: "Назад", callback_data: "main_menu" }]);
-  return sendMessage(token, chatId, "Выберите ФИО брокера:", { inline_keyboard: keyboard });
+
+  return sendMessage(env.BOT_TOKEN, chatId, "Выберите ФИО брокера:", {
+    inline_keyboard: keyboard
+  });
 }
 
 async function sendObjectMenu(env, chatId, objectId) {
@@ -361,6 +379,18 @@ async function createObject(env, chatId, broker) {
   ]);
 
   return { number };
+}
+
+async function getBrokers(env) {
+  const token = await getAccessToken(env);
+  const rows = await getValues(env, token, "brokers!A2:C");
+
+  return rows
+    .filter(row => String(row[2]).toUpperCase() === "TRUE")
+    .map(row => ({
+      id: row[0],
+      name: row[1]
+    }));
 }
 
 async function getObjects(env, chatId) {
