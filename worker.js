@@ -179,9 +179,12 @@ if (data === "create_object") {
     return sendBrokerLinkMenu(env, chatId);
   }
 
-  if ((await isAdmin(env, chatId)) && !broker) {
-    return sendMessage(env.BOT_TOKEN, chatId, "Вы администратор. Выберите объект через «Мои объекты» или привяжите брокера для создания объектов.");
-  }
+if ((await isAdmin(env, chatId)) && !broker) {
+  broker = {
+    id: "admin",
+    name: "Тест"
+  };
+}
 
   const object = await createObject(env, chatId, broker);
   await setState(env, chatId, "waiting_title", object.number, "", "");
@@ -461,7 +464,7 @@ async function getCurrentBroker(env, chatId) {
 async function isAdmin(env, chatId) {
   if (SUPER_ADMINS.includes(Number(chatId))) return true;
 
-  const broker = await getCurrentBroker(env, chatId);
+  let broker = await getCurrentBroker(env, chatId);
   return broker?.admin === true;
 }
 
