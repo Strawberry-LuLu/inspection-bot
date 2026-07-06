@@ -542,6 +542,54 @@ async function generatePdf(env, objectId) {
   const width = page.getWidth() - margin * 2;
   let y = 800;
 
+  function addRow(label, value) {
+  if (y < 60) {
+    page = pdfDoc.addPage([595, 842]);
+    y = 800;
+  }
+
+  const labelX = margin;
+  const valueX = 260;
+  const labelWidth = 210;
+  const valueWidth = page.getWidth() - valueX - margin;
+
+  const labelLines = wrapText(String(label), font, 10, labelWidth);
+  const valueLines = wrapText(String(value || "—"), font, 10, valueWidth);
+
+  const maxLines = Math.max(labelLines.length, valueLines.length);
+
+  for (let i = 0; i < maxLines; i++) {
+    if (y < 60) {
+      page = pdfDoc.addPage([595, 842]);
+      y = 800;
+    }
+
+    if (labelLines[i]) {
+      page.drawText(labelLines[i], {
+        x: labelX,
+        y,
+        size: 10,
+        font,
+        color: rgb(0.25, 0.25, 0.25)
+      });
+    }
+
+    if (valueLines[i]) {
+      page.drawText(valueLines[i], {
+        x: valueX,
+        y,
+        size: 10,
+        font,
+        color: rgb(0, 0, 0)
+      });
+    }
+
+    y -= 15;
+  }
+
+  y -= 4;
+}
+
   function addText(text, size = 10) {
     const lines = wrapText(text, font, size, width);
 
@@ -579,10 +627,10 @@ async function generatePdf(env, objectId) {
     addText(sectionTitle, 13);
     y -= 4;
 
-    for (const q of QUESTIONS[sectionId] || []) {
-      const answer = answers[`${sectionId}:${q.id}`] || "—";
-      addText(`${q.title}: ${answer}`, 10);
-    }
+for (const q of QUESTIONS[sectionId] || []) {
+  const answer = answers[`${sectionId}:${q.id}`] || "—";
+  addRow(q.title, answer);
+}
 
     y -= 10;
   }
