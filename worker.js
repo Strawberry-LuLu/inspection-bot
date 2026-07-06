@@ -1,9 +1,9 @@
+import { PDFDocument, rgb } from "pdf-lib";
+import fontkit from "@pdf-lib/fontkit";
+
 const SUPER_ADMINS = [
   738795572
 ];
-
-import { PDFDocument, rgb } from "pdf-lib";
-import fontkit from "@pdf-lib/fontkit";
 
 const SECTIONS = [
   ["identification", "1. Идентификация объекта"],
