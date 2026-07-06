@@ -611,27 +611,6 @@ function wrapText(text, font, size, maxWidth) {
   return lines;
 }
 
-function wrapText(text, font, size, maxWidth) {
-  const words = String(text).split(" ");
-  const lines = [];
-  let line = "";
-
-  for (const word of words) {
-    const testLine = line ? `${line} ${word}` : word;
-    const testWidth = font.widthOfTextAtSize(testLine, size);
-
-    if (testWidth > maxWidth && line) {
-      lines.push(line);
-      line = word;
-    } else {
-      line = testLine;
-    }
-  }
-
-  if (line) lines.push(line);
-  return lines;
-}
-
 async function sendPdf(token, chatId, pdfBuffer, filename) {
   const form = new FormData();
 
