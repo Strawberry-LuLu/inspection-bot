@@ -1,3 +1,7 @@
+const SUPER_ADMINS = [
+  738795572
+];
+
 import { PDFDocument, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 
@@ -128,8 +132,18 @@ async function handleMessage(message, env) {
 
   if (text.startsWith("/start")) {
     await clearState(env, chatId);
-    await sendMainMenu(env.BOT_TOKEN, chatId);
+
+if (!(await isAdmin(env, chatId))) {
+  const broker = await getCurrentBroker(env, chatId);
+
+  if (!broker) {
+    await sendBrokerLinkMenu(env, chatId);
     return;
+  }
+}
+
+await sendMainMenu(env.BOT_TOKEN, chatId);
+return;
   }
 
   const state = await getState(env, chatId);
@@ -158,26 +172,15 @@ async function handleCallback(callback, env) {
 
   await answerCallback(env.BOT_TOKEN, callback.id);
 
-  if (data === "create_object") return sendBrokerSelect(env, chatId);
-  if (data === "main_menu") { await clearState(env, chatId); return sendMainMenu(env.BOT_TOKEN, chatId); }
+if (data === "create_object") {
+  const broker = await getCurrentBroker(env, chatId);
 
-  if (data === "my_objects") {
-    const objects = await getObjects(env, chatId);
-    if (!objects.length) return sendMessage(env.BOT_TOKEN, chatId, "У вас пока нет объектов.");
-
-    const keyboard = objects.map(o => [{ text: `${o.number} — ${o.title}`, callback_data: `object_menu:${o.number}` }]);
-    keyboard.push([{ text: "Назад", callback_data: "main_menu" }]);
-    return sendMessage(env.BOT_TOKEN, chatId, "Ваши объекты:", { inline_keyboard: keyboard });
+  if (!(await isAdmin(env, chatId)) && !broker) {
+    return sendBrokerLinkMenu(env, chatId);
   }
 
-  if (data.startsWith("broker:")) {
-  const brokerId = data.split(":")[1];
-
-  const brokers = await getBrokers(env);
-  const broker = brokers.find(b => b.id === brokerId);
-
-  if (!broker) {
-    return sendMessage(env.BOT_TOKEN, chatId, "Брокер не найден или неактивен.");
+  if ((await isAdmin(env, chatId)) && !broker) {
+    return sendMessage(env.BOT_TOKEN, chatId, "Вы администратор. Выберите объект через «Мои объекты» или привяжите брокера для создания объектов.");
   }
 
   const object = await createObject(env, chatId, broker);
@@ -189,9 +192,44 @@ async function handleCallback(callback, env) {
     `✅ Объект создан\n\n${object.number}\nБрокер: ${broker.name}\nСтатус: 🟡 Черновик\n\nВведите название объекта сообщением.\nНапример: ЖК Символ, 2-комн., аренда`
   );
 }
+  if (data === "main_menu") { await clearState(env, chatId); return sendMainMenu(env.BOT_TOKEN, chatId); }
 
- if (data.startsWith("pdf:")) {
+if (data.startsWith("link_broker:")) {
+  const brokerId = data.split(":")[1];
+
+  await assignTelegramIdToBroker(env, brokerId, chatId);
+
+  await sendMessage(env.BOT_TOKEN, chatId, "Готово ✅\nТеперь вы привязаны к своему профилю.");
+  return sendMainMenu(env.BOT_TOKEN, chatId);
+}
+
+  if (data === "my_objects") {
+  const objects = await getObjects(env, chatId);
+
+  if (!objects.length) {
+    return sendMessage(env.BOT_TOKEN, chatId, "У вас пока нет объектов.");
+  }
+
+  const keyboard = objects.map(o => [
+    {
+      text: `${o.number} — ${o.title}`,
+      callback_data: `object_menu:${o.number}`
+    }
+  ]);
+
+  keyboard.push([{ text: "Назад", callback_data: "main_menu" }]);
+
+  return sendMessage(env.BOT_TOKEN, chatId, "Ваши объекты:", {
+    inline_keyboard: keyboard
+  });
+}
+
+if (data.startsWith("pdf:")) {
   const objectId = data.split(":")[1];
+
+  if (!(await canAccessObject(env, chatId, objectId))) {
+    return sendMessage(env.BOT_TOKEN, chatId, "❌ У вас нет доступа к этому объекту.");
+  }
 
   await sendMessage(env.BOT_TOKEN, chatId, "Формирую PDF...");
 
@@ -205,49 +243,82 @@ async function handleCallback(callback, env) {
   return;
 }
 
-  if (data.startsWith("object_menu:")) {
-    return sendObjectMenu(env, chatId, data.split(":")[1]);
+if (data.startsWith("object_menu:")) {
+  const objectId = data.split(":")[1];
+
+  if (!(await canAccessObject(env, chatId, objectId))) {
+    return sendMessage(env.BOT_TOKEN, chatId, "❌ У вас нет доступа к этому объекту.");
   }
 
-  if (data.startsWith("section:")) {
-    const [, objectId, sectionId] = data.split(":");
-    return sendSectionMenu(env, chatId, objectId, sectionId);
+  return sendObjectMenu(env, chatId, objectId);
+}
+
+if (data.startsWith("section:")) {
+  const [, objectId, sectionId] = data.split(":");
+
+  if (!(await canAccessObject(env, chatId, objectId))) {
+    return sendMessage(env.BOT_TOKEN, chatId, "❌ У вас нет доступа к этому объекту.");
   }
 
-  if (data.startsWith("q:")) {
-    const [, objectId, sectionId, questionId] = data.split(":");
-    return openQuestion(env, chatId, objectId, sectionId, questionId);
+  return sendSectionMenu(env, chatId, objectId, sectionId);
+}
+
+if (data.startsWith("q:")) {
+  const [, objectId, sectionId, questionId] = data.split(":");
+
+  if (!(await canAccessObject(env, chatId, objectId))) {
+    return sendMessage(env.BOT_TOKEN, chatId, "❌ У вас нет доступа к этому объекту.");
   }
 
-  if (data.startsWith("a:")) {
-    const [, objectId, sectionId, questionId, optionIndex] = data.split(":");
-    const q = getQuestion(sectionId, questionId);
-    const answer = q.options[Number(optionIndex)];
-    await saveAnswer(env, objectId, sectionId, questionId, q.title, answer);
-    return sendSectionMenu(env, chatId, objectId, sectionId);
+  return openQuestion(env, chatId, objectId, sectionId, questionId);
+}
+
+if (data.startsWith("a:")) {
+  const [, objectId, sectionId, questionId, optionIndex] = data.split(":");
+
+  if (!(await canAccessObject(env, chatId, objectId))) {
+    return sendMessage(env.BOT_TOKEN, chatId, "❌ У вас нет доступа к этому объекту.");
   }
 
-    if (data.startsWith("m:")) {
-    const [, objectId, sectionId, questionId, optionIndex] = data.split(":");
-    const q = getQuestion(sectionId, questionId);
-    const option = q.options[Number(optionIndex)];
+  const q = getQuestion(sectionId, questionId);
+  const answer = q.options[Number(optionIndex)];
 
-    const answers = await getAnswers(env, objectId);
-    const key = `${sectionId}:${questionId}`;
-    const current = answers[key] ? answers[key].split(", ").filter(Boolean) : [];
+  await saveAnswer(env, objectId, sectionId, questionId, q.title, answer);
 
-    const updated = current.includes(option)
-      ? current.filter(x => x !== option)
-      : [...current, option];
+  return sendSectionMenu(env, chatId, objectId, sectionId);
+}
 
-    await saveAnswer(env, objectId, sectionId, questionId, q.title, updated.join(", "));
+if (data.startsWith("m:")) {
+  const [, objectId, sectionId, questionId, optionIndex] = data.split(":");
 
-    return openQuestion(env, chatId, objectId, sectionId, questionId);
+  if (!(await canAccessObject(env, chatId, objectId))) {
+    return sendMessage(env.BOT_TOKEN, chatId, "❌ У вас нет доступа к этому объекту.");
   }
 
-  if (data.startsWith("pdf:")) {
-    return sendMessage(env.BOT_TOKEN, chatId, "PDF подключим следующим шагом.");
-  }
+  const q = getQuestion(sectionId, questionId);
+  const option = q.options[Number(optionIndex)];
+
+  const answers = await getAnswers(env, objectId);
+  const key = `${sectionId}:${questionId}`;
+  const current = answers[key]
+    ? answers[key].split(", ").filter(Boolean)
+    : [];
+
+  const updated = current.includes(option)
+    ? current.filter(x => x !== option)
+    : [...current, option];
+
+  await saveAnswer(
+    env,
+    objectId,
+    sectionId,
+    questionId,
+    q.title,
+    updated.join(", ")
+  );
+
+  return openQuestion(env, chatId, objectId, sectionId, questionId);
+}
 }
 
 async function sendMainMenu(token, chatId) {
@@ -256,20 +327,6 @@ async function sendMainMenu(token, chatId) {
       [{ text: "Создать объект", callback_data: "create_object" }],
       [{ text: "Мои объекты", callback_data: "my_objects" }]
     ]
-  });
-}
-
-async function sendBrokerSelect(env, chatId) {
-  const brokers = await getBrokers(env);
-
-  const keyboard = brokers.map(b => [
-    { text: b.name, callback_data: `broker:${b.id}` }
-  ]);
-
-  keyboard.push([{ text: "Назад", callback_data: "main_menu" }]);
-
-  return sendMessage(env.BOT_TOKEN, chatId, "Выберите ФИО брокера:", {
-    inline_keyboard: keyboard
   });
 }
 
@@ -383,24 +440,83 @@ async function createObject(env, chatId, broker) {
 
 async function getBrokers(env) {
   const token = await getAccessToken(env);
-  const rows = await getValues(env, token, "brokers!A2:C");
+  const rows = await getValues(env, token, "brokers!A2:E");
 
   return rows
-    .filter(row => String(row[2]).toUpperCase() === "TRUE")
+    .filter(row => String(row[3]).toUpperCase() === "TRUE")
     .map(row => ({
       id: row[0],
-      name: row[1]
+      name: row[1],
+      telegramId: row[2],
+      active: String(row[3]).toUpperCase() === "TRUE",
+      admin: String(row[4]).toUpperCase() === "TRUE"
     }));
+}
+
+async function getCurrentBroker(env, chatId) {
+  const brokers = await getBrokers(env);
+  return brokers.find(b => String(b.telegramId) === String(chatId)) || null;
+}
+
+async function isAdmin(env, chatId) {
+  if (SUPER_ADMINS.includes(Number(chatId))) return true;
+
+  const broker = await getCurrentBroker(env, chatId);
+  return broker?.admin === true;
+}
+
+async function assignTelegramIdToBroker(env, brokerId, chatId) {
+  const token = await getAccessToken(env);
+  const rows = await getValues(env, token, "brokers!A2:E");
+
+  const index = rows.findIndex(row => row[0] === brokerId);
+  if (index === -1) return;
+
+  const rowNumber = index + 2;
+
+  await updateValues(env, token, `brokers!C${rowNumber}:C${rowNumber}`, [
+    [String(chatId)]
+  ]);
+}
+
+async function canAccessObject(env, chatId, objectId) {
+  if (await isAdmin(env, chatId)) return true;
+
+  const token = await getAccessToken(env);
+  const rows = await getValues(env, token, "objects!A2:H");
+  const row = rows.find(r => r[0] === objectId);
+
+  if (!row) return false;
+
+  return String(row[1]) === String(chatId);
+}
+
+async function sendBrokerLinkMenu(env, chatId) {
+  const brokers = await getBrokers(env);
+
+  const keyboard = brokers.map(b => [
+    { text: b.name, callback_data: `link_broker:${b.id}` }
+  ]);
+
+  return sendMessage(env.BOT_TOKEN, chatId, "Выберите себя из списка:", {
+    inline_keyboard: keyboard
+  });
 }
 
 async function getObjects(env, chatId) {
   const token = await getAccessToken(env);
   const rows = await getValues(env, token, "objects!A2:H");
 
-  return rows.filter(r => String(r[1]) === String(chatId)).map(r => ({
-    number: r[0], broker: r[3], title: r[4], status: r[7]
+const admin = await isAdmin(env, chatId);
+
+return rows
+  .filter(r => admin || String(r[1]) === String(chatId))
+  .map(r => ({
+    number: r[0],
+    broker: r[3],
+    title: r[4],
+    status: r[7]
   }));
-}
 
 async function getObject(env, objectId) {
   const token = await getAccessToken(env);
