@@ -2,6 +2,7 @@
   "name": "inspection-bot",
   "version": "1.0.0",
   "main": "worker.js",
+  "pdf-lib": "^1.17.1"
   "scripts": {
     "start": "node worker.js"
   },
