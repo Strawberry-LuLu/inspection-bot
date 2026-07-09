@@ -192,7 +192,7 @@ if (data === "create_object") {
   return sendMessage(
     env.BOT_TOKEN,
     chatId,
-    `✅ Объект создан\n\n${object.number}\nБрокер: ${broker.name}\nСтатус: 🟡 Черновик\n\nВведите название объекта сообщением.\nНапример: ЖК Символ, 2-комн., аренда`
+    `✅ Объект создан\n\n${object.number}\nБрокер: ${broker.name}\nВведите название объекта сообщением.\nНапример: ЖК Символ, 2-комн., аренда`
   );
 }
   if (data === "main_menu") { await clearState(env, chatId); return sendMainMenu(env.BOT_TOKEN, chatId); }
@@ -364,7 +364,7 @@ else if (answeredCount > 0) prefix = "🟡";
   return sendMessage(
     env.BOT_TOKEN,
     chatId,
-    `${object.number}\nНазвание: ${object.title}\nБрокер: ${object.broker}\nСтатус: 🟡 ${object.status}\n\nВыберите раздел:`,
+    `${object.number}\nНазвание: ${object.title}\nБрокер: ${object.broker}\nВыберите раздел:`,
     { inline_keyboard: keyboard }
   );
 }
@@ -434,12 +434,15 @@ async function createObject(env, chatId, broker) {
   const number = await getNextObjectNumber(env, token);
   const now = new Date().toISOString();
 
-  await appendRow(env, token, "objects!A:H", [
-    number, String(chatId), broker.id, broker.name, "Без названия", now, now, "Черновик"
-  ]);
-
-  return { number };
-}
+await appendRow(env, token, "objects!A:G", [
+  number,
+  String(chatId),
+  broker.id,
+  broker.name,
+  "Без названия",
+  now,
+  now
+]);
 
 async function getBrokers(env) {
   const token = await getAccessToken(env);
@@ -518,7 +521,6 @@ return rows
     number: r[0],
     broker: r[3],
     title: r[4],
-    status: r[7]
   }));
   } 
 
@@ -526,7 +528,7 @@ async function getObject(env, objectId) {
   const token = await getAccessToken(env);
   const rows = await getValues(env, token, "objects!A2:H");
   const r = rows.find(row => row[0] === objectId);
-  return { number: r[0], broker: r[3], title: r[4], status: r[7] };
+  return { number: r[0], broker: r[3], title: r[4],};
 }
 
 async function updateObjectTitle(env, objectId, title) {
@@ -767,7 +769,6 @@ async function generatePdf(env, objectId) {
   addText(`Номер: ${object.number}`);
   addText(`Название: ${object.title}`);
   addText(`Брокер: ${object.broker}`);
-  addText(`Статус: ${object.status}`);
   y -= 12;
 
   for (const section of SECTIONS) {
