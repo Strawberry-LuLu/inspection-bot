@@ -444,6 +444,9 @@ await appendRow(env, token, "objects!A:G", [
   now
 ]);
 
+  return { number };
+}
+
 async function getBrokers(env) {
   const token = await getAccessToken(env);
   const rows = await getValues(env, token, "brokers!A2:E");
