@@ -220,12 +220,12 @@ if (data.startsWith("link_broker:")) {
     return sendMessage(env.BOT_TOKEN, chatId, "У вас пока нет объектов.");
   }
 
-  const keyboard = objects.map(o => [
-    {
-      text: `${o.number} — ${o.title}`,
-      callback_data: `object_menu:${o.number}`
-    }
-  ]);
+const keyboard = objects.map(o => [
+  {
+    text: `${o.number} — ${o.broker} — ${o.title}`,
+    callback_data: `object_menu:${o.number}`
+  }
+]);
 
   keyboard.push([{ text: "Назад", callback_data: "main_menu" }]);
 
