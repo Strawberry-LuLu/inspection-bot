@@ -510,13 +510,33 @@ async function canAccessObject(env, chatId, objectId) {
 async function sendBrokerLinkMenu(env, chatId) {
   const brokers = await getBrokers(env);
 
-  const keyboard = brokers.map(b => [
-    { text: b.name, callback_data: `link_broker:${b.id}` }
+  const availableBrokers = brokers.filter(
+    broker => !String(broker.telegramId || "").trim()
+  );
+
+  if (!availableBrokers.length) {
+    return sendMessage(
+      env.BOT_TOKEN,
+      chatId,
+      "Не удалось найти свободный профиль. Обратитесь к администратору."
+    );
+  }
+
+  const keyboard = availableBrokers.map(broker => [
+    {
+      text: broker.name,
+      callback_data: `link_broker:${broker.id}`
+    }
   ]);
 
-  return sendMessage(env.BOT_TOKEN, chatId, "Выберите себя из списка:", {
-    inline_keyboard: keyboard
-  });
+  return sendMessage(
+    env.BOT_TOKEN,
+    chatId,
+    "Выберите себя из списка:",
+    {
+      inline_keyboard: keyboard
+    }
+  );
 }
 
 async function getObjects(env, chatId) {
