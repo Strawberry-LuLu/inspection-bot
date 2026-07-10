@@ -146,10 +146,6 @@ if (text.startsWith("/start")) {
   return;
 }
 
-await sendMainMenu(env.BOT_TOKEN, chatId);
-return;
-  }
-
   const state = await getState(env, chatId);
 
   if (state?.state === "waiting_title") {
