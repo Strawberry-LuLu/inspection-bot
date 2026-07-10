@@ -130,16 +130,20 @@ async function handleMessage(message, env) {
   const chatId = message.chat.id;
   const text = (message.text || "").trim();
 
-  if (text.startsWith("/start")) {
-    await clearState(env, chatId);
+if (text.startsWith("/start")) {
+  await clearState(env, chatId);
 
-if (!(await isAdmin(env, chatId))) {
-  const broker = await getCurrentBroker(env, chatId);
+  if (!(await isAdmin(env, chatId))) {
+    const broker = await getCurrentBroker(env, chatId);
 
-  if (!broker) {
-    await sendBrokerLinkMenu(env, chatId);
-    return;
+    if (!broker) {
+      await sendBrokerLinkMenu(env, chatId);
+      return;
+    }
   }
+
+  await sendMainMenu(env.BOT_TOKEN, chatId);
+  return;
 }
 
 await sendMainMenu(env.BOT_TOKEN, chatId);
@@ -202,7 +206,14 @@ if (data.startsWith("link_broker:")) {
 
   await assignTelegramIdToBroker(env, brokerId, chatId);
 
-  await sendMessage(env.BOT_TOKEN, chatId, "Готово ✅\nТеперь вы привязаны к своему профилю.");
+  const broker = await getCurrentBroker(env, chatId);
+
+  await sendMessage(
+    env.BOT_TOKEN,
+    chatId,
+    `Готово ✅\nВы вошли как: ${broker?.name || "сотрудник"}.\n\nВ дальнейшем бот будет узнавать вас автоматически.`
+  );
+
   return sendMainMenu(env.BOT_TOKEN, chatId);
 }
 
