@@ -1,4 +1,9 @@
-import { PDFDocument, rgb } from "pdf-lib";
+import {
+  PDFDocument,
+  PDFName,
+  PDFString,
+  rgb
+} from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 
 const SUPER_ADMINS = [
@@ -238,16 +243,35 @@ if (data.startsWith("pdf:")) {
   const objectId = data.split(":")[1];
 
   if (!(await canAccessObject(env, chatId, objectId))) {
-    return sendMessage(env.BOT_TOKEN, chatId, "❌ У вас нет доступа к этому объекту.");
+    return sendMessage(
+      env.BOT_TOKEN,
+      chatId,
+      "❌ У вас нет доступа к этому объекту."
+    );
   }
 
   await sendMessage(env.BOT_TOKEN, chatId, "Формирую PDF...");
 
   try {
+    const object = await getObject(env, objectId);
     const pdfBuffer = await generatePdf(env, objectId);
-    await sendPdf(env.BOT_TOKEN, chatId, pdfBuffer, `${objectId}.pdf`);
+
+    const safeTitle = sanitizeFileName(
+      object.title || "Без названия"
+    );
+
+    await sendPdf(
+      env.BOT_TOKEN,
+      chatId,
+      pdfBuffer,
+      `${objectId} - ${safeTitle}.pdf`
+    );
   } catch (error) {
-    await sendMessage(env.BOT_TOKEN, chatId, "Ошибка PDF:\n" + error.message);
+    await sendMessage(
+      env.BOT_TOKEN,
+      chatId,
+      "Ошибка PDF:\n" + error.message
+    );
   }
 
   return;
@@ -724,52 +748,127 @@ async function generatePdf(env, objectId) {
   const width = page.getWidth() - margin * 2;
   let y = 800;
 
-  function addRow(label, value) {
-  if (y < 60) {
+ function addRow(label, value, isLink = false) {
+  const fontSize = 10;
+  const lineHeight = 16;
+
+  const labelX = margin;
+  const valueX = 260;
+
+  const labelWidth = 210;
+  const valueWidth = page.getWidth() - valueX - margin;
+
+  const normalizedValue = String(value || "—");
+
+  const labelLines = wrapText(
+    String(label),
+    font,
+    fontSize,
+    labelWidth
+  );
+
+  const valueLines = wrapText(
+    normalizedValue,
+    font,
+    fontSize,
+    valueWidth
+  );
+
+  const maxLines = Math.max(
+    labelLines.length,
+    valueLines.length
+  );
+
+  const requiredHeight = maxLines * lineHeight + 8;
+
+  // Чтобы строка целиком переходила на следующую страницу
+  if (y - requiredHeight < 50) {
     page = pdfDoc.addPage([595, 842]);
     y = 800;
   }
 
-  const labelX = margin;
-  const valueX = 260;
-  const labelWidth = 210;
-  const valueWidth = page.getWidth() - valueX - margin;
+  const validLink =
+    isLink &&
+    /^https?:\/\//i.test(normalizedValue.trim());
 
-  const labelLines = wrapText(String(label), font, 10, labelWidth);
-  const valueLines = wrapText(String(value || "—"), font, 10, valueWidth);
 
-  const maxLines = Math.max(labelLines.length, valueLines.length);
-
-  for (let i = 0; i < maxLines; i++) {
-    if (y < 60) {
+for (let i = 0; i < maxLines; i++) {
+    if (y < 50) {
       page = pdfDoc.addPage([595, 842]);
       y = 800;
     }
 
-    if (labelLines[i]) {
+    if (labelLines[i] !== undefined) {
       page.drawText(labelLines[i], {
         x: labelX,
         y,
-        size: 10,
+        size: fontSize,
         font,
         color: rgb(0.25, 0.25, 0.25)
       });
     }
 
-    if (valueLines[i]) {
-      page.drawText(valueLines[i], {
+    if (valueLines[i] !== undefined) {
+      const currentValueLine = valueLines[i];
+
+      page.drawText(currentValueLine, {
         x: valueX,
         y,
-        size: 10,
+        size: fontSize,
         font,
-        color: rgb(0, 0, 0)
+        color: validLink
+          ? rgb(0.05, 0.25, 0.7)
+          : rgb(0, 0, 0)
       });
+
+      if (validLink && currentValueLine) {
+        const textWidth = font.widthOfTextAtSize(
+          currentValueLine,
+          fontSize
+        );
+
+        // Подчёркивание ссылки
+        page.drawLine({
+          start: {
+            x: valueX,
+            y: y - 1
+          },
+          end: {
+            x: valueX + textWidth,
+            y: y - 1
+          },
+          thickness: 0.6,
+          color: rgb(0.05, 0.25, 0.7)
+        });
+
+        // Кликабельная область
+        const annotation = pdfDoc.context.register(
+          pdfDoc.context.obj({
+            Type: PDFName.of("Annot"),
+            Subtype: PDFName.of("Link"),
+            Rect: [
+              valueX,
+              y - 3,
+              valueX + textWidth,
+              y + fontSize + 3
+            ],
+            Border: [0, 0, 0],
+            A: pdfDoc.context.obj({
+              Type: PDFName.of("Action"),
+              S: PDFName.of("URI"),
+              URI: PDFString.of(normalizedValue.trim())
+            })
+          })
+        );
+
+        page.node.addAnnot(annotation);
+      }
     }
 
-    y -= 15;
+    y -= lineHeight;
   }
 
-  y -= 4;
+  y -= 5;
 }
 
   function addText(text, size = 10) {
@@ -810,7 +909,12 @@ async function generatePdf(env, objectId) {
 
 for (const q of QUESTIONS[sectionId] || []) {
   const answer = answers[`${sectionId}:${q.id}`] || "—";
-  addRow(q.title, answer);
+
+  addRow(
+    q.title,
+    answer,
+    q.id === "listing_url"
+  );
 }
 
     y -= 10;
@@ -820,24 +924,80 @@ for (const q of QUESTIONS[sectionId] || []) {
 }
 
 function wrapText(text, font, size, maxWidth) {
-  const words = String(text).split(" ");
+  const source = String(text ?? "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n");
+
+  const paragraphs = source.split("\n");
   const lines = [];
-  let line = "";
 
-  for (const word of words) {
-    const testLine = line ? `${line} ${word}` : word;
-    const testWidth = font.widthOfTextAtSize(testLine, size);
+  for (const paragraph of paragraphs) {
+    const cleanParagraph = paragraph.trim();
 
-    if (testWidth > maxWidth && line) {
-      lines.push(line);
-      line = word;
-    } else {
-      line = testLine;
+    // Сохраняем пустую строку между абзацами
+    if (!cleanParagraph) {
+      lines.push("");
+      continue;
+    }
+
+    const words = cleanParagraph.split(/\s+/);
+    let currentLine = "";
+
+    for (const word of words) {
+      const testLine = currentLine
+        ? `${currentLine} ${word}`
+        : word;
+
+      const testWidth = font.widthOfTextAtSize(testLine, size);
+
+      if (testWidth <= maxWidth) {
+        currentLine = testLine;
+        continue;
+      }
+
+      if (currentLine) {
+        lines.push(currentLine);
+        currentLine = "";
+      }
+
+      // Разбиваем слишком длинные ссылки или слова
+      if (font.widthOfTextAtSize(word, size) > maxWidth) {
+        let part = "";
+
+        for (const character of word) {
+          const testPart = part + character;
+
+          if (
+            font.widthOfTextAtSize(testPart, size) > maxWidth &&
+            part
+          ) {
+            lines.push(part);
+            part = character;
+          } else {
+            part = testPart;
+          }
+        }
+
+        currentLine = part;
+      } else {
+        currentLine = word;
+      }
+    }
+
+    if (currentLine) {
+      lines.push(currentLine);
     }
   }
 
-  if (line) lines.push(line);
-  return lines;
+  return lines.length ? lines : [""];
+}
+
+function sanitizeFileName(value) {
+  return String(value)
+    .replace(/[\\/:*?"<>|]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 100);
 }
 
 async function sendPdf(token, chatId, pdfBuffer, filename) {
