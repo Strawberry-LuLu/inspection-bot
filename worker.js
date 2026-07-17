@@ -369,22 +369,29 @@ async function sendObjectMenu(env, chatId, objectId) {
   const answers = await getAnswers(env, objectId);
 
   let totalQuestions = 0;
-let totalAnswered = 0;
+  let totalAnswered = 0;
 
   const keyboard = SECTIONS.map(s => {
     const sectionId = s[0];
     const sectionTitle = s[1];
     const questions = QUESTIONS[sectionId] || [];
 
-    const answeredCount = questions.filter(q => answers[`${sectionId}:${q.id}`]).length;
-const totalCount = questions.length;
+    const answeredCount = questions.filter(
+      q => answers[`${sectionId}:${q.id}`]
+    ).length;
+
+    const totalCount = questions.length;
 
     totalQuestions += totalCount;
-totalAnswered += answeredCount;
+    totalAnswered += answeredCount;
 
-let prefix = "⚪";
-if (answeredCount === totalCount && totalCount > 0) prefix = "🟢";
-else if (answeredCount > 0) prefix = "🟡";
+    let prefix = "⚪";
+
+    if (answeredCount === totalCount && totalCount > 0) {
+      prefix = "🟢";
+    } else if (answeredCount > 0) {
+      prefix = "🟡";
+    }
 
     return [
       {
@@ -394,36 +401,56 @@ else if (answeredCount > 0) prefix = "🟡";
     ];
   });
 
-  keyboard.push([{ text: "Сформировать PDF", callback_data: `pdf:${objectId}` }]);
-  keyboard.push([{ text: "Мои объекты", callback_data: "my_objects" }]);
-  keyboard.push([{ text: "Главное меню", callback_data: "main_menu" }]);
+  keyboard.push([
+    {
+      text: "Сформировать PDF",
+      callback_data: `pdf:${objectId}`
+    }
+  ]);
 
-  let text =
+  keyboard.push([
+    {
+      text: "Мои объекты",
+      callback_data: "my_objects"
+    }
+  ]);
+
+  keyboard.push([
+    {
+      text: "Главное меню",
+      callback_data: "main_menu"
+    }
+  ]);
+
+  let messageText =
 `${object.number}
 Название: ${object.title}
 Брокер: ${object.broker}
 
 Выберите раздел:`;
 
-if (totalQuestions > 0 && totalAnswered === totalQuestions) {
-  text =
+  if (totalQuestions > 0 && totalAnswered === totalQuestions) {
+    messageText =
 `🎉 Лист осмотра заполнен полностью!
 
-Рекомендуем сформировать и сохранить PDF.
+Не забудьте сформировать и сохранить PDF.
 
 ${object.number}
 Название: ${object.title}
 Брокер: ${object.broker}
 
 Выберите действие:`;
-}
+  }
 
   return sendMessage(
-  env.BOT_TOKEN,
-  chatId,
-  text,
-  { inline_keyboard: keyboard }
-);
+    env.BOT_TOKEN,
+    chatId,
+    messageText,
+    {
+      inline_keyboard: keyboard
+    }
+  );
+}
 
 async function sendSectionMenu(env, chatId, objectId, sectionId) {
   const section = SECTIONS.find(s => s[0] === sectionId);
